@@ -33,7 +33,8 @@ const CONFIG = {
 
     // Puppeteer / Chromium
     puppeteer: {
-        executablePath: '/usr/bin/chromium-browser',
+        executablePath: '/usr/bin/google-chrome-stable',
+        userDataDir: '/opt/wa-safety-poll/.chrome-data',
         args: [
             '--no-sandbox',
             '--disable-setuid-sandbox',
@@ -42,6 +43,7 @@ const CONFIG = {
             '--disable-gpu',
             '--no-zygote',
             '--single-process',
+            '--user-agent=Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
         ],
     },
 };
