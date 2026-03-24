@@ -1,229 +1,350 @@
-# wa-safety-poll
+# 📍 wa-safety-poll
 
-A lightweight Node.js bot that posts a daily safety check-in poll to a WhatsApp group every workday (Monday–Friday) at **06:00 Gulf Standard Time (UTC+4)**.
+> *Because "is everyone okay?" deserves a better answer than radio silence.*
 
-The poll asks team members to indicate where they are working from. After posting, the bot attempts to pin the message for 24 hours automatically.
+A WhatsApp bot that posts a daily safety poll to a company group every weekday morning at **06:00 GST (UTC+4)**. Team members indicate where they're working from with a single tap. The poll is pinned for 24 hours so nobody has to scroll to find it.
 
----
-
-## How it works
-
-- The bot connects to WhatsApp using a dedicated phone number via [whatsapp-web.js](https://github.com/pedroslopez/whatsapp-web.js), which drives a headless Chromium browser simulating WhatsApp Web.
-- A cron job triggers every weekday morning at 06:00 Asia/Dubai.
-- The poll is sent to the configured group as a native WhatsApp poll (single-choice).
-- The bot then pins the poll for 24 hours. **This requires the bot account to be a group admin.**
-- The bot runs as a systemd service and restarts automatically if it crashes.
-
-### Poll format
-
-```
-[DD/MM/YYYY]: Where is everyone?
-  ○ Dubai Office
-  ○ Donna Tower Office
-  ○ Abu Dhabi
-  ○ Remote Work
-```
+Built for the Dubai office. Born out of necessity. Running on a Linux server so it never forgets, even when you do.
 
 ---
 
-## Prerequisites
+## 🗺️ How It Works
 
-| Requirement | Details |
-|---|---|
-| OS | Ubuntu 22.04 LTS or 24.04 LTS |
-| Node.js | v18 or later (installed by setup script) |
-| RAM | 512 MB minimum (Chromium is the main consumer) |
-| WhatsApp number | A dedicated SIM or virtual number — **not a personal number** |
-| Group admin | The bot number must be made a group admin for pinning to work |
+```
+06:00 GST, Mon-Fri
+      │
+      ▼
+  node-cron fires
+      │
+      ▼
+whatsapp-web.js sends poll to group
+      │
+      ▼
+Poll pinned for 24 hours
+      │
+      ▼
+Everyone clicks. You sleep better.
+```
+
+The bot runs as a `systemd` service under a locked-down `wabot` system account. It authenticates to WhatsApp once via QR code scan and saves the session locally. After that it's fully autonomous.
 
 ---
 
-## Project structure
+## 📋 Poll Format
+
+**Title:** `Monday, 24 March 2026: Where is everyone?`
+
+**Options (single choice):**
+- Dubai Office
+- Donna Tower Office
+- Abu Dhabi
+- Remote Work
+
+---
+
+## 🖥️ Server Requirements
+
+| What | Version |
+|------|---------|
+| OS | Ubuntu 24.04 LTS |
+| Node.js | v22.x (LTS) |
+| Browser | Google Chrome Stable (non-snap) |
+| Systemd | Yes (standard on Ubuntu) |
+| Timezone | Asia/Dubai |
+
+---
+
+## 📁 File Layout
 
 ```
-wa-safety-poll/
-├── src/
-│   └── bot.js               Main bot logic, cron scheduler, poll sender
-├── scripts/
-│   ├── setup.sh             One-shot setup script (run as root)
-│   └── wa-safety-poll.service  systemd unit file
-├── logs/                    Auto-created at runtime, one log file per day
-├── .wwebjs_auth/            Auto-created — WhatsApp session data (do not delete)
-├── config.json              Bot configuration (edit before first run)
+/opt/wa-safety-poll/          ← application root (owned by wabot)
+├── index.js                  ← the bot
+├── update.sh                 ← pull from git and restart service
 ├── package.json
-├── .gitignore
-└── README.md
+├── .npmrc                    ← npm cache path config
+├── .puppeteerrc.cjs          ← tells Puppeteer to use system Chrome
+├── node_modules/
+├── .wwebjs_auth/             ← WhatsApp session data (700, wabot only)
+└── .chrome-data/             ← Chrome user data dir (700, wabot only)
+
+/var/log/wa-safety-poll-update.log   ← update.sh log
+/etc/systemd/system/wa-safety-poll.service
+/etc/sudoers.d/wa-safety-poll
 ```
 
 ---
 
-## Installation
+## 🚀 Fresh Server Setup
 
-### Step 1 — Clone the repository
+> Do this once. Then forget about it and let it run.
 
-```bash
-git clone https://github.com/YOUR_ORG/wa-safety-poll.git
-cd wa-safety-poll
-```
-
-### Step 2 — Edit config.json
-
-Open `config.json` and set the `groupName` to the **exact** name of your WhatsApp group, character for character:
-
-```json
-{
-  "groupName": "Company Safety Check-in",
-  "pollOptions": [
-    "Dubai Office",
-    "Donna Tower Office",
-    "Abu Dhabi",
-    "Remote Work"
-  ]
-}
-```
-
-> The group name must match exactly — including capitalisation and spaces. You can verify the name by opening WhatsApp on your phone and checking the group header.
-
-### Step 3 — Run the setup script
+### 1. Create the bot system user
 
 ```bash
-sudo bash scripts/setup.sh
+sudo useradd --system --no-create-home --shell /usr/sbin/nologin wabot
+sudo mkdir -p /home/wabot
+sudo chown wabot:wabot /home/wabot
+sudo chmod 700 /home/wabot
+sudo usermod -d /home/wabot wabot
 ```
 
-This script:
-- Installs Node.js LTS via NodeSource
-- Installs all Chromium system dependencies
-- Creates a dedicated unprivileged system user `wa-bot`
-- Copies the project to `/opt/wa-safety-poll`
-- Runs `npm install`
-- Installs and enables the systemd service (does **not** start it yet)
+> Chrome needs a home directory even for headless runs. Yes, really. No, we can't skip it.
 
-### Step 4 — Start the service and scan the QR code
+### 2. Install Node.js 22 (LTS)
 
 ```bash
-sudo systemctl start wa-safety-poll
-sudo journalctl -u wa-safety-poll -f
+sudo apt update && sudo apt install -y ca-certificates curl gnupg
+curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
+sudo apt install -y nodejs
+node -v && npm -v
 ```
 
-Within a few seconds you will see a QR code printed in the log output.
-
-1. Open WhatsApp on the **bot phone** (the dedicated spare number).
-2. Go to **Settings → Linked Devices → Link a Device**.
-3. Scan the QR code shown in the terminal.
-
-Once authenticated, the log will show:
-
-```
-[INFO] Authenticated successfully.
-[INFO] Client is ready. Scheduling poll job...
-[INFO] Cron job scheduled: weekdays 06:00 Asia/Dubai.
-```
-
-The session is saved to `.wwebjs_auth/` on disk. You will not need to scan again unless WhatsApp invalidates the session (which can happen if the phone app is logged out remotely).
-
-### Step 5 — Make the bot a group admin
-
-On any admin's phone:
-1. Open the WhatsApp group.
-2. Tap the group name → Participants.
-3. Tap the bot's number → Make group admin.
-
-This is required for pinning to work. The poll will still be sent even without admin rights, but it will not be pinned.
-
----
-
-## Testing — send the poll immediately
-
-To verify everything works without waiting until 06:00:
+### 3. Install Google Chrome (non-snap)
 
 ```bash
-sudo -u wa-bot node /opt/wa-safety-poll/src/bot.js --send-now
+curl -fsSL https://dl.google.com/linux/linux_signing_key.pub \
+  | sudo gpg --dearmor -o /usr/share/keyrings/google-chrome.gpg
+
+echo "deb [arch=amd64 signed-by=/usr/share/keyrings/google-chrome.gpg] \
+  http://dl.google.com/linux/chrome/deb/ stable main" \
+  | sudo tee /etc/apt/sources.list.d/google-chrome.list
+
+sudo apt update && sudo apt install -y google-chrome-stable
+google-chrome-stable --version
 ```
 
-Check the group on your phone. The poll should appear and be pinned within a few seconds.
+> Do not use the snap version of Chromium. It refuses to run without a real home directory and will waste an afternoon you'll never get back.
 
----
+### 4. Create the application directory
 
-## Service management
+```bash
+sudo mkdir -p /opt/wa-safety-poll
+sudo chown wabot:wabot /opt/wa-safety-poll
+sudo chmod 750 /opt/wa-safety-poll
+sudo usermod -aG wabot $USER
+newgrp wabot
+```
 
-| Action | Command |
-|---|---|
-| Start | `sudo systemctl start wa-safety-poll` |
-| Stop | `sudo systemctl stop wa-safety-poll` |
-| Restart | `sudo systemctl restart wa-safety-poll` |
-| Status | `sudo systemctl status wa-safety-poll` |
-| Live logs | `sudo journalctl -u wa-safety-poll -f` |
-| Logs today | `sudo journalctl -u wa-safety-poll --since today` |
+### 5. Clone the repo
 
-Log files are also written to `/opt/wa-safety-poll/logs/YYYY-MM-DD.log`.
+```bash
+cd /opt
+sudo -u wabot git clone https://github.com/YOUR_USERNAME/wa-safety-poll.git
+```
 
----
-
-## Updating the bot
+### 6. Install dependencies
 
 ```bash
 cd /opt/wa-safety-poll
-sudo systemctl stop wa-safety-poll
-sudo -u wa-bot git pull
-sudo -u wa-bot npm install --omit=dev
-sudo systemctl start wa-safety-poll
+sudo -u wabot PUPPETEER_SKIP_DOWNLOAD=true npm install --cache /opt/wa-safety-poll/.npm-cache
+```
+
+### 7. Create required directories
+
+```bash
+sudo mkdir -p /opt/wa-safety-poll/.wwebjs_auth
+sudo chown wabot:wabot /opt/wa-safety-poll/.wwebjs_auth
+sudo chmod 700 /opt/wa-safety-poll/.wwebjs_auth
+
+sudo mkdir -p /opt/wa-safety-poll/.chrome-data
+sudo chown wabot:wabot /opt/wa-safety-poll/.chrome-data
+sudo chmod 700 /opt/wa-safety-poll/.chrome-data
+
+sudo touch /var/log/wa-safety-poll-update.log
+sudo chown wabot:wabot /var/log/wa-safety-poll-update.log
+sudo chmod 640 /var/log/wa-safety-poll-update.log
+```
+
+### 8. Configure the bot
+
+Edit `index.js` and set the group name:
+
+```bash
+sudo -u wabot nano /opt/wa-safety-poll/index.js
+```
+
+Change:
+```js
+groupName: 'YOUR_GROUP_NAME_HERE',
+```
+
+To the exact name of your WhatsApp group, character for character, including any emoji if the group name has one.
+
+### 9. Set server timezone
+
+```bash
+sudo timedatectl set-timezone Asia/Dubai
+timedatectl
+```
+
+### 10. Install the systemd service
+
+```bash
+sudo nano /etc/systemd/system/wa-safety-poll.service
+```
+
+Paste:
+
+```ini
+[Unit]
+Description=WhatsApp Safety Poll Bot
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=wabot
+Group=wabot
+WorkingDirectory=/opt/wa-safety-poll
+ExecStart=/usr/bin/node /opt/wa-safety-poll/index.js
+Restart=on-failure
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=wa-safety-poll
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+
+[Install]
+WantedBy=multi-user.target
+```
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable wa-safety-poll
+```
+
+### 11. Allow passwordless update runs
+
+```bash
+sudo visudo -f /etc/sudoers.d/wa-safety-poll
+```
+
+Add (replace `youruser` with your actual Linux username):
+
+```
+youruser ALL=(ALL) NOPASSWD: /opt/wa-safety-poll/update.sh
 ```
 
 ---
 
-## Changing the poll options or group name
+## 📱 First-Time WhatsApp Authentication
 
-1. Edit `/opt/wa-safety-poll/config.json`
-2. Restart the service: `sudo systemctl restart wa-safety-poll`
+> You do this once per bot number. The session is saved and survives reboots.
 
-No re-authentication needed.
+**Before you start:** the bot number must be a **dedicated WhatsApp account on a physical SIM**. Virtual/VoIP numbers are rejected by WhatsApp at registration. A used human account may get its session revoked immediately. A fresh number is the only reliable option. Yes, it costs AED 25-50 at Carrefour. Yes, it's worth it.
 
----
+Run the bot manually so you can see the QR code:
 
-## Troubleshooting
+```bash
+sudo -u wabot node /opt/wa-safety-poll/index.js
+```
 
-### QR code never appears
-- Check that Chromium dependencies are installed: `chromium-browser --version`
-- Check logs: `sudo journalctl -u wa-safety-poll -f`
-- Confirm the service is running as user `wa-bot` and the `/opt/wa-safety-poll` directory is owned by that user
+1. A QR code appears in the terminal
+2. Open WhatsApp on the bot phone
+3. Go to **Settings > Linked Devices > Link a Device**
+4. Scan the QR code
+5. Wait for the terminal to show:
 
-### Group not found
-- The error `Group "..." not found` means the group name in `config.json` does not exactly match the WhatsApp group name
-- Double-check for trailing spaces, emoji, or different capitalisation
+```
+[...] Authenticated. Session saved.
+[...] Client is ready.
+[...] Scheduler active. Waiting for next trigger...
+```
 
-### Poll is sent but not pinned
-- The bot number is not a group admin. Follow Step 5 above
-- Pinning is also silently blocked by WhatsApp in some cases. The poll still works normally even without pinning
+6. Hit `Ctrl+C`
+7. Start the service properly:
 
-### Session expired / QR code appears again
-- This happens if someone logs out the bot's linked device remotely, or if WhatsApp forces re-authentication
-- Simply scan the QR code again as in Step 4
-- To prevent this: do not use the bot's phone number actively for other chats
+```bash
+sudo systemctl start wa-safety-poll
+sudo systemctl status wa-safety-poll
+```
 
-### High CPU or memory on first run
-- Chromium initialises on first launch and can briefly spike. This is normal and settles within 30–60 seconds
-
----
-
-## Security notes
-
-- The bot number's WhatsApp session is stored in `/opt/wa-safety-poll/.wwebjs_auth/`. This directory should not be committed to Git (it is in `.gitignore`) and should not be readable by other users.
-- The bot runs under the dedicated unprivileged user `wa-bot` with no login shell.
-- whatsapp-web.js is an unofficial library. Meta's ToS prohibit automation of personal accounts. Use a dedicated number, keep the bot's behaviour non-spammy (one message per day), and you are unlikely to encounter issues in practice. There is no guarantee against a number ban, which is why using a spare number rather than a personal one is essential.
+Also make the bot number a **group admin** in WhatsApp, otherwise poll pinning will fail silently.
 
 ---
 
-## Maintenance calendar
+## 🔧 Day-to-Day Operations
 
-| Task | Frequency | Notes |
-|---|---|---|
-| Check service status | Weekly | `systemctl status wa-safety-poll` |
-| Review log files | Monthly | `/opt/wa-safety-poll/logs/` |
-| Update dependencies | Quarterly | `npm audit` then `npm update` |
-| Verify QR session active | Monthly | Check that polls are still arriving |
+### Check service status
+```bash
+sudo systemctl status wa-safety-poll
+```
+
+### View live logs
+```bash
+journalctl -u wa-safety-poll -f
+```
+
+### Restart the service
+```bash
+sudo systemctl restart wa-safety-poll
+```
+
+### Deploy an update from git
+```bash
+sudo bash /opt/wa-safety-poll/update.sh
+```
+
+### View update history
+```bash
+cat /var/log/wa-safety-poll-update.log
+```
 
 ---
 
-## License
+## 🔁 Re-authentication (if the session expires)
 
-Internal use only.
+This happens if WhatsApp revokes the linked device, or if the bot number gets a new phone.
+
+```bash
+sudo systemctl stop wa-safety-poll
+sudo rm -rf /opt/wa-safety-poll/.wwebjs_auth/session
+sudo rm -rf /opt/wa-safety-poll/.chrome-data/*
+sudo -u wabot node /opt/wa-safety-poll/index.js
+```
+
+Scan the QR code, wait for "Client is ready", then `Ctrl+C` and restart the service.
+
+---
+
+## ⚙️ Configuration Reference
+
+All config lives at the top of `index.js` in the `CONFIG` object:
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `groupName` | *(set this)* | Exact WhatsApp group name, case-sensitive |
+| `poll.question` | `Where is everyone?` | Poll question body |
+| `poll.options` | 4 location options | Edit freely, max 12 options |
+| `poll.allowMultipleAnswers` | `false` | Single choice enforced |
+| `cronSchedule` | `0 6 * * 1-5` | Mon-Fri 06:00 server local time |
+| `pinDuration` | `86400` | Seconds to pin (86400 = 24h) |
+| `puppeteer.executablePath` | `/usr/bin/google-chrome-stable` | Path to Chrome binary |
+
+---
+
+## ⚠️ Known Limitations
+
+- **WhatsApp ToS:** `whatsapp-web.js` is unofficial. Meta does not endorse it. For an internal safety tool with low message volume, ban risk is minimal but not zero.
+- **Pinning requires admin:** the bot number must be a group admin or pinning fails silently (the poll still gets sent).
+- **Session lifespan:** WhatsApp occasionally revokes linked device sessions, especially after long inactivity or WhatsApp app updates on the bot phone. See re-authentication steps above.
+- **Virtual numbers don't work:** WhatsApp blocks VoIP numbers at registration. Use a physical SIM.
+
+---
+
+## 🆘 Troubleshooting
+
+| Symptom | Likely cause | Fix |
+|---------|-------------|-----|
+| `LOGOUT` on startup | Session revoked remotely | Re-authenticate |
+| `Group not found` error | Wrong group name in config | Check `CONFIG.groupName`, exact match required |
+| Poll sends but doesn't pin | Bot not a group admin | Promote bot number to admin in WhatsApp |
+| Chrome fails to launch | Wrong executable path | Check `CONFIG.puppeteer.executablePath` with `which google-chrome-stable` |
+| Service won't start | Port/permission issue | Check `journalctl -u wa-safety-poll -n 50` |
+| Poll not firing at 6am | Server timezone wrong | `timedatectl` should show `Asia/Dubai` |
+
+---
+
+*Last updated: March 2026*
