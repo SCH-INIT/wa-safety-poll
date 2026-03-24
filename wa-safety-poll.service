@@ -1,0 +1,20 @@
+[Unit]
+Description=WhatsApp Safety Poll Bot
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=wa-bot
+WorkingDirectory=/opt/wa-safety-poll
+ExecStart=/usr/bin/node src/bot.js
+Restart=on-failure
+RestartSec=15
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=wa-safety-poll
+Environment=TZ=Asia/Dubai
+Environment=NODE_ENV=production
+
+[Install]
+WantedBy=multi-user.target

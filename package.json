@@ -1,0 +1,18 @@
+{
+  "name": "wa-safety-poll",
+  "version": "1.0.0",
+  "description": "WhatsApp daily safety check-in poll bot — sends a location poll to a group every workday at 06:00 GST.",
+  "main": "src/bot.js",
+  "scripts": {
+    "start": "node src/bot.js",
+    "send-now": "node src/bot.js --send-now"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "whatsapp-web.js": "^1.23.0",
+    "node-cron": "^3.0.3",
+    "qrcode-terminal": "^0.12.0"
+  }
+}
