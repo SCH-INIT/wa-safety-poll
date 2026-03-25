@@ -2,7 +2,7 @@
 
 > *Because "is everyone okay?" deserves a better answer than radio silence.*
 
-A WhatsApp bot that posts a daily safety poll to a company group every weekday morning at **06:00 GST (UTC+4)**. Team members indicate where they're working from with a single tap. The poll is pinned for 24 hours so nobody has to scroll to find it.
+A WhatsApp Bot that posts a daily safety poll to a company group every weekday morning at **06:00 GST (UTC+4)**. Team members indicate where they're working from with a single tap. The poll is pinned for 24 hours so nobody has to scroll to find it.
 
 Built for the Dubai office. Born out of necessity. Running on a Linux server so it never forgets, even when you do.
 
